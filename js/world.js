@@ -33,6 +33,12 @@ export class World {
         this.foodX = new Float32Array(this.foodCount);
         this.foodY = new Float32Array(this.foodCount);
 
+        // --- ENEMIES ---
+        this.enemyCount = Math.floor(this.capacity / CONFIG.ENEMY_RATIO);
+        this.enemyX = new Float32Array(this.enemyCount);
+        this.enemyY = new Float32Array(this.enemyCount);
+        this.spawnEnemies();
+
         // Init Food
         this.patternTimer = 0;
         this.currentPattern = 0; // 0: Random, 1: Ring, 2: Stripes, 3: Corners, 4: Center
@@ -87,6 +93,13 @@ export class World {
         }
     }
 
+    spawnEnemies() {
+        for (let i = 0; i < this.enemyCount; i++) {
+            this.enemyX[i] = Math.random() * CONFIG.WIDTH;
+            this.enemyY[i] = Math.random() * CONFIG.HEIGHT;
+        }
+    }
+
     spawn(x, y) {
         if (this.count >= this.capacity) return;
         const id = this.count++;
@@ -130,6 +143,44 @@ export class World {
 
         // Food grid removed - we use global search now
 
+        // 1.5 Update Enemies
+        for (let i = 0; i < this.enemyCount; i++) {
+            let minDistSq = Infinity;
+            let targetId = -1;
+
+            // Find nearest agent
+            // Optimization: We could use the grid, but for 10 enemies, brute force is fine.
+            for (let a = 0; a < this.count; a++) {
+                const dx = this.x[a] - this.enemyX[i];
+                const dy = this.y[a] - this.enemyY[i];
+                const dSq = dx * dx + dy * dy;
+                if (dSq < minDistSq) {
+                    minDistSq = dSq;
+                    targetId = a;
+                }
+            }
+
+            if (targetId !== -1) {
+                const dx = this.x[targetId] - this.enemyX[i];
+                const dy = this.y[targetId] - this.enemyY[i];
+                const dist = Math.sqrt(minDistSq);
+
+                if (dist > 0) {
+                    this.enemyX[i] += (dx / dist) * CONFIG.ENEMY_SPEED;
+                    this.enemyY[i] += (dy / dist) * CONFIG.ENEMY_SPEED;
+                }
+
+                // Kill Agent?
+                if (dist < CONFIG.ENEMY_SIZE + 2) {
+                    this.kill(targetId);
+                    // If we killed the agent at 'i' in the agent loop (which hasn't happened yet), 
+                    // we are fine because we are in the enemy loop.
+                    // However, we just swapped the last agent to 'targetId'.
+                    // We should decrement 'a' if we were in the agent loop, but we are not.
+                }
+            }
+        }
+
         // 2. Update Agents
         for (let i = 0; i < this.count; i++) {
             // --- SENSORY INPUT ---
@@ -155,6 +206,21 @@ export class World {
             this.inputBuffer[1] = nearestFoodDist / maxDist;
             this.inputBuffer[2] = angleToFood;
             this.inputBuffer[3] = this.energy[i] / 100;
+
+            const [nearestEnemyDist, nearestEnemyId, enemyDx, enemyDy] = this.getNearestEnemy(i);
+
+            // Calculate Angle to Enemy
+            let angleToEnemy = 0;
+            if (nearestEnemyId !== -1) {
+                const absoluteAngle = Math.atan2(enemyDy, enemyDx);
+                let relativeAngle = absoluteAngle - this.angle[i];
+                while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
+                while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
+                angleToEnemy = relativeAngle / Math.PI;
+            }
+
+            this.inputBuffer[4] = nearestEnemyDist / maxDist;
+            this.inputBuffer[5] = angleToEnemy;
 
             // --- NEURAL NETWORK ---
             const outputs = NeuralNetwork.compute(this.inputBuffer, this.brainWeights, i * BRAIN_SIZE);
@@ -218,6 +284,31 @@ export class World {
             if (distSq < minDistSq) {
                 minDistSq = distSq;
                 foundId = f;
+                foundDx = dx;
+                foundDy = dy;
+            }
+        }
+
+        return [Math.sqrt(minDistSq), foundId, foundDx, foundDy];
+    }
+
+    getNearestEnemy(i) {
+        let minDistSq = Infinity;
+        let foundId = -1;
+        let foundDx = 0;
+        let foundDy = 0;
+
+        const myX = this.x[i];
+        const myY = this.y[i];
+
+        for (let e = 0; e < this.enemyCount; e++) {
+            const dx = this.enemyX[e] - myX;
+            const dy = this.enemyY[e] - myY;
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
+                foundId = e;
                 foundDx = dx;
                 foundDy = dy;
             }

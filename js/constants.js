@@ -14,9 +14,15 @@ export const CONFIG = {
     FOOD_ENERGY: 50,
     FOOD_SIZE: 4,
 
+    // Enemies
+    ENEMY_RATIO: 200, // 1 enemy per 200 agents
+    ENEMY_SPEED: 1.5,
+    ENEMY_SIZE: 10,
+
     // Neural Network Topology
     // Added AngleToFood so they know WHERE to turn
-    INPUT_NEURONS: 4,  // [NearestNeighborDist, NearestFoodDist, AngleToFood, Energy]
+    // Added NearestEnemyDist and AngleToEnemy
+    INPUT_NEURONS: 6,  // [NearestNeighborDist, NearestFoodDist, AngleToFood, Energy, NearestEnemyDist, AngleToEnemy]
     HIDDEN_NEURONS: 6,
     OUTPUT_NEURONS: 2, // [TurnForce, SpeedForce]
 };

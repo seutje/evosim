@@ -44,5 +44,15 @@ export class Renderer {
             // Draw a small square (faster than circle)
             ctx.fillRect(x[i], y[i], 4, 4);
         }
+
+        // Draw Enemies
+        ctx.fillStyle = '#ff4444';
+        const enemyCount = world.enemyCount;
+        const enemyX = world.enemyX;
+        const enemyY = world.enemyY;
+
+        for (let i = 0; i < enemyCount; i++) {
+            ctx.fillRect(enemyX[i] - 5, enemyY[i] - 5, 10, 10);
+        }
     }
 }
