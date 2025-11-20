@@ -1,0 +1,343 @@
+import { CONFIG, BRAIN_SIZE } from './constants.js';
+import { SpatialHash } from './spatial-hash.js';
+import { NeuralNetwork } from './neural-network.js';
+
+export class World {
+    constructor() {
+        this.capacity = CONFIG.AGENT_COUNT;
+        this.count = 0;
+
+        // --- PHYSICS DATA (SoA) ---
+        this.x = new Float32Array(this.capacity);
+        this.y = new Float32Array(this.capacity);
+        this.vx = new Float32Array(this.capacity);
+        this.vy = new Float32Array(this.capacity);
+        this.angle = new Float32Array(this.capacity);
+
+        // --- BIOLOGICAL DATA ---
+        this.color = new Float32Array(this.capacity * 3); // R, G, B
+        this.energy = new Float32Array(this.capacity);
+        this.generation = new Int16Array(this.capacity);
+
+        // --- PHASE 2: NEURAL NETWORK DATA ---
+        this.brainWeights = new Float32Array(this.capacity * BRAIN_SIZE);
+
+        // Temp buffer for inputs to avoid GC
+        this.inputBuffer = new Float32Array(CONFIG.INPUT_NEURONS);
+
+        // --- SPATIAL PARTITIONING ---
+        this.grid = new SpatialHash(CONFIG.WIDTH, CONFIG.HEIGHT, CONFIG.GRID_SIZE, this.capacity);
+
+        // --- ENVIRONMENT (FOOD) ---
+        this.foodCount = CONFIG.FOOD_COUNT;
+        this.foodX = new Float32Array(this.foodCount);
+        this.foodY = new Float32Array(this.foodCount);
+
+        // Init Food
+        this.patternTimer = 0;
+        this.currentPattern = 0; // 0: Random, 1: Ring, 2: Stripes, 3: Corners, 4: Center
+
+        this.switchPattern(); // Initial spawn
+    }
+
+    switchPattern() {
+        this.currentPattern = (this.currentPattern + 1) % 5;
+        // console.log("Switching Food Pattern to: " + this.currentPattern);
+
+        // Relocate all food immediately
+        for (let i = 0; i < this.foodCount; i++) {
+            const [fx, fy] = this.getPatternPosition();
+            this.foodX[i] = fx;
+            this.foodY[i] = fy;
+        }
+    }
+
+    getPatternPosition() {
+        const w = CONFIG.WIDTH;
+        const h = CONFIG.HEIGHT;
+
+        switch (this.currentPattern) {
+            case 0: // Random
+                return [Math.random() * w, Math.random() * h];
+
+            case 1: // Ring
+                const angle = Math.random() * Math.PI * 2;
+                const r = Math.min(w, h) * 0.3 + (Math.random() * 40);
+                return [w / 2 + Math.cos(angle) * r, h / 2 + Math.sin(angle) * r];
+
+            case 2: // Vertical Stripes
+                const stripe = Math.floor(Math.random() * 3); // 0, 1, 2
+                const sx = (w / 4) * (stripe + 1) + (Math.random() * 60 - 30);
+                return [sx, Math.random() * h];
+
+            case 3: // Corners
+                const corner = Math.floor(Math.random() * 4);
+                let cx = (corner % 2) * w;
+                let cy = Math.floor(corner / 2) * h;
+                // Pull in
+                cx = cx === 0 ? w * 0.15 : w * 0.85;
+                cy = cy === 0 ? h * 0.15 : h * 0.85;
+                return [cx + (Math.random() * 100 - 50), cy + (Math.random() * 100 - 50)];
+
+            case 4: // Center Cluster
+                return [w / 2 + (Math.random() * 300 - 150), h / 2 + (Math.random() * 300 - 150)];
+
+            default:
+                return [Math.random() * w, Math.random() * h];
+        }
+    }
+
+    spawn(x, y) {
+        if (this.count >= this.capacity) return;
+        const id = this.count++;
+
+        this.x[id] = x;
+        this.y[id] = y;
+
+        const a = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 2;
+        this.vx[id] = Math.cos(a) * speed;
+        this.vy[id] = Math.sin(a) * speed;
+        this.angle[id] = a;
+
+        this.energy[id] = 200;
+
+        // Random color
+        this.color[id * 3] = 100 + Math.random() * 155;
+        this.color[id * 3 + 1] = 100 + Math.random() * 155;
+        this.color[id * 3 + 2] = 255;
+
+        // Randomize Brain
+        const weightOffset = id * BRAIN_SIZE;
+        for (let i = 0; i < BRAIN_SIZE; i++) {
+            this.brainWeights[weightOffset + i] = (Math.random() - 0.5) * 2;
+        }
+    }
+
+    update(dt) {
+        // 0. Update Environment Pattern
+        this.patternTimer += dt;
+        if (this.patternTimer > 10) {
+            this.patternTimer = 0;
+            this.switchPattern();
+        }
+
+        // 1. Rebuild Spatial Hashes
+        this.grid.clear();
+        for (let i = 0; i < this.count; i++) {
+            this.grid.add(i, this.x[i], this.y[i]);
+        }
+
+        // Food grid removed - we use global search now
+
+        // 2. Update Agents
+        for (let i = 0; i < this.count; i++) {
+            // --- SENSORY INPUT ---
+            const nearestNeighborDist = this.getNearestNeighborDist(i);
+            const [nearestFoodDist, nearestFoodId, foodDx, foodDy] = this.getNearestFood(i);
+
+            // Calculate Angle to Food (Relative to Agent's Heading)
+            let angleToFood = 0;
+            if (nearestFoodId !== -1) {
+                const absoluteAngle = Math.atan2(foodDy, foodDx);
+                let relativeAngle = absoluteAngle - this.angle[i];
+
+                // Normalize to -PI to PI
+                while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
+                while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
+
+                angleToFood = relativeAngle / Math.PI; // Normalize -1 to 1
+            }
+
+            this.inputBuffer[0] = nearestNeighborDist / CONFIG.SENSOR_RANGE;
+            // Normalize by world diagonal (approx 2000 for 1080p)
+            const maxDist = Math.max(CONFIG.WIDTH, CONFIG.HEIGHT) * 1.5;
+            this.inputBuffer[1] = nearestFoodDist / maxDist;
+            this.inputBuffer[2] = angleToFood;
+            this.inputBuffer[3] = this.energy[i] / 100;
+
+            // --- NEURAL NETWORK ---
+            const outputs = NeuralNetwork.compute(this.inputBuffer, this.brainWeights, i * BRAIN_SIZE);
+
+            const turnForce = outputs[0];
+            const speedForce = outputs[1];
+
+            // --- PHYSICS ---
+            this.angle[i] += turnForce * 0.2;
+            const speed = 2 + speedForce;
+
+            this.vx[i] = Math.cos(this.angle[i]) * speed;
+            this.vy[i] = Math.sin(this.angle[i]) * speed;
+
+            this.x[i] += this.vx[i];
+            this.y[i] += this.vy[i];
+
+            // --- INTERACTIONS ---
+            // Eat Food?
+            if (nearestFoodDist < CONFIG.FOOD_SIZE + 4 && nearestFoodId !== -1) {
+                // Eat
+                this.energy[i] += CONFIG.FOOD_ENERGY;
+                if (this.energy[i] > 100) this.energy[i] = 100;
+
+                // Respawn Food (Respecting current pattern)
+                const [fx, fy] = this.getPatternPosition();
+                this.foodX[nearestFoodId] = fx;
+                this.foodY[nearestFoodId] = fy;
+            }
+
+            // Boundaries
+            if (this.x[i] < 0) { this.x[i] = 0; this.vx[i] *= -1; }
+            if (this.x[i] > CONFIG.WIDTH) { this.x[i] = CONFIG.WIDTH; this.vx[i] *= -1; }
+            if (this.y[i] < 0) { this.y[i] = 0; this.vy[i] *= -1; }
+            if (this.y[i] > CONFIG.HEIGHT) { this.y[i] = CONFIG.HEIGHT; this.vy[i] *= -1; }
+
+            // Metabolism
+            this.energy[i] -= 0.05 + (Math.abs(speedForce) * 0.05);
+            if (this.energy[i] <= 0) {
+                this.kill(i);
+                i--;
+            }
+        }
+    }
+
+    getNearestFood(i) {
+        let minDistSq = Infinity;
+        let foundId = -1;
+        let foundDx = 0;
+        let foundDy = 0;
+
+        const myX = this.x[i];
+        const myY = this.y[i];
+
+        // Global search (Brute force is faster than SpatialHash for "nearest anywhere" with low count)
+        for (let f = 0; f < this.foodCount; f++) {
+            const dx = this.foodX[f] - myX;
+            const dy = this.foodY[f] - myY;
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
+                foundId = f;
+                foundDx = dx;
+                foundDy = dy;
+            }
+        }
+
+        return [Math.sqrt(minDistSq), foundId, foundDx, foundDy];
+    }
+
+    getNearestNeighborDist(i) {
+        const range = CONFIG.SENSOR_RANGE;
+        const rangeSq = range * range;
+        let minDistSq = rangeSq;
+        let found = false;
+
+        const cellX = Math.floor(this.x[i] / CONFIG.GRID_SIZE);
+        const cellY = Math.floor(this.y[i] / CONFIG.GRID_SIZE);
+
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                const cx = cellX + dx;
+                const cy = cellY + dy;
+                if (cx < 0 || cx >= this.grid.cols || cy < 0 || cy >= this.grid.rows) continue;
+
+                const cellIndex = cy * this.grid.cols + cx;
+                let neighbor = this.grid.cellStart[cellIndex];
+
+                while (neighbor !== -1) {
+                    if (neighbor !== i) {
+                        const dx = this.x[i] - this.x[neighbor];
+                        const dy = this.y[i] - this.y[neighbor];
+                        const distSq = dx * dx + dy * dy;
+
+                        if (distSq < minDistSq) {
+                            minDistSq = distSq;
+                            found = true;
+                        }
+                    }
+                    neighbor = this.grid.cellNext[neighbor];
+                }
+            }
+        }
+
+        return found ? Math.sqrt(minDistSq) : range;
+    }
+
+    kill(id) {
+        const last = this.count - 1;
+
+        this.x[id] = this.x[last];
+        this.y[id] = this.y[last];
+        this.vx[id] = this.vx[last];
+        this.vy[id] = this.vy[last];
+        this.angle[id] = this.angle[last];
+        this.energy[id] = this.energy[last];
+        this.generation[id] = this.generation[last];
+
+        this.color[id * 3] = this.color[last * 3];
+        this.color[id * 3 + 1] = this.color[last * 3 + 1];
+        this.color[id * 3 + 2] = this.color[last * 3 + 2];
+
+        const srcStart = last * BRAIN_SIZE;
+        const destStart = id * BRAIN_SIZE;
+        this.brainWeights.set(this.brainWeights.subarray(srcStart, srcStart + BRAIN_SIZE), destStart);
+
+        this.count--;
+    }
+
+    evolve() {
+        const indices = new Int32Array(this.count);
+        for (let i = 0; i < this.count; i++) indices[i] = i;
+
+        indices.sort((a, b) => this.energy[b] - this.energy[a]);
+
+        const survivorCount = Math.floor(this.count / 2);
+        if (survivorCount === 0) {
+            console.log("Extinction! Respawning...");
+            this.count = 0;
+            for (let i = 0; i < this.capacity; i++) {
+                this.spawn(Math.random() * CONFIG.WIDTH, Math.random() * CONFIG.HEIGHT);
+            }
+            return;
+        }
+
+        const bestBrains = new Float32Array(survivorCount * BRAIN_SIZE);
+
+        for (let i = 0; i < survivorCount; i++) {
+            const oldIdx = indices[i];
+            const start = oldIdx * BRAIN_SIZE;
+            const end = start + BRAIN_SIZE;
+            bestBrains.set(this.brainWeights.subarray(start, end), i * BRAIN_SIZE);
+        }
+
+        this.count = 0;
+
+        for (let i = 0; i < this.capacity; i++) {
+            const parentIdx = i % survivorCount;
+
+            this.spawn(Math.random() * CONFIG.WIDTH, Math.random() * CONFIG.HEIGHT);
+            const newId = this.count - 1;
+
+            const srcStart = parentIdx * BRAIN_SIZE;
+            const destStart = newId * BRAIN_SIZE;
+
+            this.brainWeights.set(bestBrains.subarray(srcStart, srcStart + BRAIN_SIZE), destStart);
+
+            if (i >= survivorCount) {
+                NeuralNetwork.mutate(this.brainWeights, destStart, CONFIG.MUTATION_RATE);
+                this.color[newId * 3] += (Math.random() - 0.5) * 50;
+                this.color[newId * 3 + 1] += (Math.random() - 0.5) * 50;
+            } else {
+                this.color[newId * 3] = 0;
+                this.color[newId * 3 + 1] = 255;
+                this.color[newId * 3 + 2] = 0;
+            }
+
+            this.generation[newId]++;
+        }
+
+        console.log(`Evolved! Survivors: ${survivorCount}. New Generation.`);
+    }
+
+
+}
