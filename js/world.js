@@ -352,7 +352,27 @@ export class World {
             }
         }
 
-        // Fallback if nothing found
+        // Fallback: Hybrid Search (Global Sampling)
+        // If nothing found in local grid, sample random food items to provide a global gradient.
+        // This prevents agents from being "blind" to distant food.
+        if (minDistSq === Infinity) {
+            const sampleCount = 20; // Check 20 random food items
+            for (let k = 0; k < sampleCount; k++) {
+                const randId = Math.floor(Math.random() * this.foodCount);
+                const dx = this.foodX[randId] - myX;
+                const dy = this.foodY[randId] - myY;
+                const distSq = dx * dx + dy * dy;
+
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                    foundId = randId;
+                    foundDx = dx;
+                    foundDy = dy;
+                }
+            }
+        }
+
+        // If STILL nothing (unlikely), return max dist
         if (minDistSq === Infinity) {
             return [Math.max(CONFIG.WIDTH, CONFIG.HEIGHT), -1, 0, 0];
         }
