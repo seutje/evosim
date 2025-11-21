@@ -5,7 +5,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "start": "http-server . -p 8000 -a localhost",
+        "start": "http-server . -p 8000 -a localhost -c-1",
         "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand"
     },
     "devDependencies": {
