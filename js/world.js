@@ -42,7 +42,7 @@ export class World {
 
         // Init Food
         this.patternTimer = 0;
-        this.currentPattern = 0; // 0: Random, 1: Ring, 2: Stripes, 3: Corners, 4: Center
+        this.currentPattern = 0; // 0: Star, 1: Ring, 2: Stripes, 3: Corners, 4: Center, 5: Spiral
 
         this.switchPattern(); // Initial spawn
 
@@ -50,7 +50,7 @@ export class World {
     }
 
     switchPattern() {
-        this.currentPattern = (this.currentPattern + 1) % 5;
+        this.currentPattern = (this.currentPattern + 1) % 6;
         // console.log("Switching Food Pattern to: " + this.currentPattern);
 
         // Relocate all food immediately
@@ -67,17 +67,26 @@ export class World {
         let x, y;
 
         switch (this.currentPattern) {
-            case 0: // Random
-                x = Math.random() * w;
-                y = Math.random() * h;
-                break;
+            case 0: { // Star
+                const arms = 5;
+                const arm = Math.floor(Math.random() * arms);
+                const angleBase = (arm / arms) * Math.PI * 2 - (Math.PI / 2); // Start pointing up
+                const dist = Math.random() * (Math.min(w, h) * 0.45);
+                const spread = 0.1; // Thickness of arms
+                const angle = angleBase + (Math.random() * spread - spread / 2);
 
-            case 1: // Ring
+                x = w / 2 + Math.cos(angle) * dist;
+                y = h / 2 + Math.sin(angle) * dist;
+                break;
+            }
+
+            case 1: { // Ring
                 const angle = Math.random() * Math.PI * 2;
                 const r = Math.min(w, h) * 0.3 + (Math.random() * 120);
                 x = w / 2 + Math.cos(angle) * r;
                 y = h / 2 + Math.sin(angle) * r;
                 break;
+            }
 
             case 2: // Vertical Stripes
                 const stripe = Math.floor(Math.random() * 3); // 0, 1, 2
@@ -101,6 +110,15 @@ export class World {
                 x = w / 2 + (Math.random() * 900 - 450);
                 y = h / 2 + (Math.random() * 900 - 450);
                 break;
+
+            case 5: { // Spiral
+                const maxR = Math.min(w, h) * 0.45;
+                const r = Math.random() * maxR;
+                const spiralAngle = r * 0.05 + (Math.random() * 0.2); // r * tightness
+                x = w / 2 + Math.cos(spiralAngle) * r;
+                y = h / 2 + Math.sin(spiralAngle) * r;
+                break;
+            }
 
             default:
                 x = Math.random() * w;
