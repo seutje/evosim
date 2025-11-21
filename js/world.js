@@ -68,12 +68,12 @@ export class World {
 
             case 1: // Ring
                 const angle = Math.random() * Math.PI * 2;
-                const r = Math.min(w, h) * 0.3 + (Math.random() * 40);
+                const r = Math.min(w, h) * 0.3 + (Math.random() * 120);
                 return [w / 2 + Math.cos(angle) * r, h / 2 + Math.sin(angle) * r];
 
             case 2: // Vertical Stripes
                 const stripe = Math.floor(Math.random() * 3); // 0, 1, 2
-                const sx = (w / 4) * (stripe + 1) + (Math.random() * 60 - 30);
+                const sx = (w / 4) * (stripe + 1) + (Math.random() * 180 - 90);
                 return [sx, Math.random() * h];
 
             case 3: // Corners
@@ -83,10 +83,10 @@ export class World {
                 // Pull in
                 cx = cx === 0 ? w * 0.15 : w * 0.85;
                 cy = cy === 0 ? h * 0.15 : h * 0.85;
-                return [cx + (Math.random() * 100 - 50), cy + (Math.random() * 100 - 50)];
+                return [cx + (Math.random() * 300 - 150), cy + (Math.random() * 300 - 150)];
 
             case 4: // Center Cluster
-                return [w / 2 + (Math.random() * 300 - 150), h / 2 + (Math.random() * 300 - 150)];
+                return [w / 2 + (Math.random() * 900 - 450), h / 2 + (Math.random() * 900 - 450)];
 
             default:
                 return [Math.random() * w, Math.random() * h];
