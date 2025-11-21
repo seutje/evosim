@@ -1,23 +1,52 @@
 import { CONFIG } from './constants.js';
-import { World } from './world.js';
 import { Renderer } from './renderer.js';
 
 const canvas = document.getElementById('simCanvas');
 const renderer = new Renderer(canvas);
-const world = new World();
 
-// Spawn agents
-for (let i = 0; i < CONFIG.AGENT_COUNT; i++) {
-    world.spawn(Math.random() * CONFIG.WIDTH, Math.random() * CONFIG.HEIGHT);
-}
+// Initialize Worker
+const worker = new Worker('js/worker.js?v=' + Date.now(), { type: 'module' });
+worker.onerror = function (e) {
+    console.error("Worker Error:", e.message, "at", e.filename, ":", e.lineno);
+};
+
+worker.postMessage({
+    type: 'init',
+    payload: {
+        width: CONFIG.WIDTH,
+        height: CONFIG.HEIGHT
+    }
+});
 
 // UI Refs
 const uiCount = document.getElementById('count');
 const uiFps = document.getElementById('fps');
+const uiGen = document.getElementById('gen');
+const uiStatus = document.getElementById('status');
+const uiTimer = document.getElementById('timer');
 
 let lastTime = performance.now();
 let frameCount = 0;
 let lastFpsUpdate = 0;
+
+worker.onmessage = function (e) {
+    const { type, payload } = e.data;
+
+    if (type === 'render') {
+        if (Math.random() < 0.01) console.log("Render Payload:", payload.count, payload.x ? payload.x.length : 'no x');
+        renderer.render(payload);
+
+        // Update UI from payload
+        // We only update UI every second to save DOM calls, but we need data.
+        // Let's store the latest data for the UI loop.
+        latestData = payload;
+    } else if (type === 'ready') {
+        console.log("Worker ready");
+        loop();
+    }
+};
+
+let latestData = null;
 
 function loop() {
     const now = performance.now();
@@ -25,30 +54,26 @@ function loop() {
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
 
-    world.update(dt);
+    // Send step to worker
+    worker.postMessage({ type: 'step', payload: dt });
 
-    renderer.clear();
-    renderer.render(world);
-
-    // UI
+    // UI Updates
     frameCount++;
     if (now - lastFpsUpdate > 1000) {
-        uiFps.innerText = Math.round(frameCount * 1000 / (now - lastFpsUpdate));
-        uiCount.innerText = world.count;
+        const fps = Math.round(frameCount * 1000 / (now - lastFpsUpdate));
+        uiFps.innerText = fps;
         frameCount = 0;
         lastFpsUpdate = now;
-    }
 
-    // Evolution Epoch (Time-based OR Population-based safety)
-    if ((frameCount % CONFIG.EPOCH_LENGTH === 0 && frameCount > 0) || world.count < CONFIG.AGENT_COUNT * 0.2) {
-        world.evolve();
-        document.getElementById('gen').innerText = world.generation[0];
-        // Optional: We could add a pattern indicator to the UI, but the user didn't ask for it explicitly.
-        // Let's just log it for now or leave it be.
-        // Actually, let's update the status text to show the pattern.
-        const patterns = ["Random", "Ring", "Stripes", "Corners", "Cluster"];
-        document.getElementById('status').innerText = patterns[world.currentPattern];
-        frameCount = 0; // Reset frame count after evolution
+        if (latestData) {
+            uiCount.innerText = latestData.count;
+            uiGen.innerText = latestData.generation;
+            const patterns = ["Random", "Ring", "Stripes", "Corners", "Cluster"];
+            uiStatus.innerText = patterns[latestData.currentPattern];
+
+            const remaining = Math.max(0, Math.ceil(CONFIG.EPOCH_LENGTH - (latestData.epochTimer || 0)));
+            uiTimer.innerText = isNaN(remaining) ? "Wait..." : remaining;
+        }
     }
 
     requestAnimationFrame(loop);
@@ -56,9 +81,17 @@ function loop() {
 
 window.addEventListener('resize', () => {
     renderer.resize(window.innerWidth, window.innerHeight);
+    // Update CONFIG in main thread (optional, mostly for initial setup)
     CONFIG.WIDTH = window.innerWidth * 5;
     CONFIG.HEIGHT = window.innerHeight * 5;
-    // Note: In a real app we should resize the SpatialHash too
+
+    // Notify worker
+    worker.postMessage({
+        type: 'resize',
+        payload: {
+            width: CONFIG.WIDTH,
+            height: CONFIG.HEIGHT
+        }
+    });
 });
 
-loop();

@@ -27,6 +27,7 @@ export class World {
 
         // --- SPATIAL PARTITIONING ---
         this.grid = new SpatialHash(CONFIG.WIDTH, CONFIG.HEIGHT, CONFIG.GRID_SIZE, this.capacity);
+        this.foodGrid = new SpatialHash(CONFIG.WIDTH, CONFIG.HEIGHT, CONFIG.GRID_SIZE, CONFIG.FOOD_COUNT);
 
         // --- ENVIRONMENT (FOOD) ---
         this.foodCount = CONFIG.FOOD_COUNT;
@@ -44,6 +45,8 @@ export class World {
         this.currentPattern = 0; // 0: Random, 1: Ring, 2: Stripes, 3: Corners, 4: Center
 
         this.switchPattern(); // Initial spawn
+
+        this.epochTimer = 0;
     }
 
     switchPattern() {
@@ -155,13 +158,27 @@ export class World {
             this.switchPattern();
         }
 
+        // Evolution Check
+        this.epochTimer += dt;
+        // Evolve every EPOCH_LENGTH seconds
+        // We keep the population check as a failsafe against extinction, but user asked for fixed time.
+        // Let's prioritize the timer but keep the extinction check (count == 0 or very low).
+        if (this.epochTimer > CONFIG.EPOCH_LENGTH || this.count < 10) {
+            console.log("Triggering Evolution. Timer:", this.epochTimer, "Count:", this.count);
+            this.evolve();
+            this.epochTimer = 0;
+        }
+
         // 1. Rebuild Spatial Hashes
         this.grid.clear();
         for (let i = 0; i < this.count; i++) {
             this.grid.add(i, this.x[i], this.y[i]);
         }
 
-        // Food grid removed - we use global search now
+        this.foodGrid.clear();
+        for (let i = 0; i < this.foodCount; i++) {
+            this.foodGrid.add(i, this.foodX[i], this.foodY[i]);
+        }
 
         // 1.5 Update Enemies
         for (let i = 0; i < this.enemyCount; i++) {
@@ -295,19 +312,40 @@ export class World {
         const myX = this.x[i];
         const myY = this.y[i];
 
-        // Global search (Brute force is faster than SpatialHash for "nearest anywhere" with low count)
-        for (let f = 0; f < this.foodCount; f++) {
-            const dx = this.foodX[f] - myX;
-            const dy = this.foodY[f] - myY;
-            const distSq = dx * dx + dy * dy;
+        // Optimized search using SpatialHash
+        const cellX = Math.floor(myX / CONFIG.GRID_SIZE);
+        const cellY = Math.floor(myY / CONFIG.GRID_SIZE);
+        const searchRadius = 2; // Check 2 cells radius (approx 100px if grid is 50)
 
-            if (distSq < minDistSq) {
-                minDistSq = distSq;
-                foundId = f;
-                foundDx = dx;
-                foundDy = dy;
+        for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+            for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+                const cx = cellX + dx;
+                const cy = cellY + dy;
+                if (cx < 0 || cx >= this.foodGrid.cols || cy < 0 || cy >= this.foodGrid.rows) continue;
+
+                const cellIndex = cy * this.foodGrid.cols + cx;
+                let foodId = this.foodGrid.cellStart[cellIndex];
+
+                while (foodId !== -1) {
+                    const dx = this.foodX[foodId] - myX;
+                    const dy = this.foodY[foodId] - myY;
+                    const distSq = dx * dx + dy * dy;
+
+                    if (distSq < minDistSq) {
+                        minDistSq = distSq;
+                        foundId = foodId;
+                        foundDx = dx;
+                        foundDy = dy;
+                    }
+                    foodId = this.foodGrid.cellNext[foodId];
+                }
             }
         }
+
+        // Fallback to global search if nothing found in radius (optional, but good for robustness)
+        // Actually, if nothing in radius, we just return "nothing found" or a max distance.
+        // But the inputs expect a value. If no food found, inputs should probably reflect that.
+        // For now, let's assume if nothing found, we return max dist.
 
         return [Math.sqrt(minDistSq), foundId, foundDx, foundDy];
     }
@@ -450,5 +488,21 @@ export class World {
         console.log(`Evolved! Survivors: ${survivorCount}. New Generation.`);
     }
 
-
+    getRenderData() {
+        return {
+            count: this.count,
+            x: this.x,
+            y: this.y,
+            color: this.color,
+            foodCount: this.foodCount,
+            foodX: this.foodX,
+            foodY: this.foodY,
+            enemyCount: this.enemyCount,
+            enemyX: this.enemyX,
+            enemyY: this.enemyY,
+            generation: this.generation[0], // Just for UI
+            currentPattern: this.currentPattern,
+            epochTimer: this.epochTimer
+        };
+    }
 }
