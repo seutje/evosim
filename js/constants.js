@@ -1,16 +1,16 @@
 export const CONFIG = {
-    AGENT_COUNT: 2000,
+    AGENT_COUNT: 5000,
     SENSOR_RANGE: 50,
     SENSOR_ANGLE: Math.PI / 4,
     MUTATION_RATE: 0.05,
     ELITISM_PERCENT: 0.1,
     GRID_SIZE: 50,
-    WIDTH: window.innerWidth,
-    HEIGHT: window.innerHeight,
+    WIDTH: window.innerWidth * 5,
+    HEIGHT: window.innerHeight * 5,
     EPOCH_LENGTH: 600,
 
     // Environment
-    FOOD_COUNT: 400, // Reduced from 1000 to 400 to require seeking
+    FOOD_COUNT: 2000,
     FOOD_ENERGY: 50,
     FOOD_SIZE: 4,
 

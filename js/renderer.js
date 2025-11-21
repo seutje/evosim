@@ -19,6 +19,9 @@ export class Renderer {
 
     render(world) {
         const ctx = this.ctx;
+        ctx.save();
+        ctx.scale(0.2, 0.2);
+
         const count = world.count;
         const x = world.x;
         const y = world.y;
@@ -54,5 +57,7 @@ export class Renderer {
         for (let i = 0; i < enemyCount; i++) {
             ctx.fillRect(enemyX[i] - 5, enemyY[i] - 5, 10, 10);
         }
+
+        ctx.restore();
     }
 }

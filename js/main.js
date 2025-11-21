@@ -56,8 +56,8 @@ function loop() {
 
 window.addEventListener('resize', () => {
     renderer.resize(window.innerWidth, window.innerHeight);
-    CONFIG.WIDTH = window.innerWidth;
-    CONFIG.HEIGHT = window.innerHeight;
+    CONFIG.WIDTH = window.innerWidth * 5;
+    CONFIG.HEIGHT = window.innerHeight * 5;
     // Note: In a real app we should resize the SpatialHash too
 });
 
