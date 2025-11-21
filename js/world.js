@@ -108,7 +108,7 @@ export class World {
         this.y[id] = y;
 
         const a = Math.random() * Math.PI * 2;
-        const speed = 2 + Math.random() * 2;
+        const speed = 4 + Math.random() * 4;
         this.vx[id] = Math.cos(a) * speed;
         this.vy[id] = Math.sin(a) * speed;
         this.angle[id] = a;
@@ -171,7 +171,7 @@ export class World {
                 }
 
                 // Kill Agent?
-                if (dist < CONFIG.ENEMY_SIZE + 2) {
+                if (dist < CONFIG.ENEMY_SIZE + (CONFIG.AGENT_SIZE / 2)) {
                     this.kill(targetId);
                     // If we killed the agent at 'i' in the agent loop (which hasn't happened yet), 
                     // we are fine because we are in the enemy loop.
@@ -230,7 +230,7 @@ export class World {
 
             // --- PHYSICS ---
             this.angle[i] += turnForce * 0.2;
-            const speed = 2 + speedForce;
+            const speed = 4 + speedForce * 2;
 
             this.vx[i] = Math.cos(this.angle[i]) * speed;
             this.vy[i] = Math.sin(this.angle[i]) * speed;
@@ -240,7 +240,7 @@ export class World {
 
             // --- INTERACTIONS ---
             // Eat Food?
-            if (nearestFoodDist < CONFIG.FOOD_SIZE + 4 && nearestFoodId !== -1) {
+            if (nearestFoodDist < CONFIG.FOOD_SIZE + CONFIG.AGENT_SIZE && nearestFoodId !== -1) {
                 // Eat
                 this.energy[i] += CONFIG.FOOD_ENERGY;
                 if (this.energy[i] > 100) this.energy[i] = 100;

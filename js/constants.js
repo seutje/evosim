@@ -1,5 +1,6 @@
 export const CONFIG = {
     AGENT_COUNT: 5000,
+    AGENT_SIZE: 8,
     SENSOR_RANGE: 50,
     SENSOR_ANGLE: Math.PI / 4,
     MUTATION_RATE: 0.05,
@@ -12,12 +13,12 @@ export const CONFIG = {
     // Environment
     FOOD_COUNT: 2000,
     FOOD_ENERGY: 50,
-    FOOD_SIZE: 4,
+    FOOD_SIZE: 8,
 
     // Enemies
     ENEMY_RATIO: 200, // 1 enemy per 200 agents
-    ENEMY_SPEED: 1.5,
-    ENEMY_SIZE: 10,
+    ENEMY_SPEED: 3.0,
+    ENEMY_SIZE: 20,
 
     // Neural Network Topology
     // Added AngleToFood so they know WHERE to turn
