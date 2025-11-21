@@ -14,7 +14,8 @@ worker.postMessage({
     type: 'init',
     payload: {
         width: CONFIG.WIDTH,
-        height: CONFIG.HEIGHT
+        height: CONFIG.HEIGHT,
+        agentCount: CONFIG.AGENT_COUNT
     }
 });
 

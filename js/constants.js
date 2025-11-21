@@ -8,7 +8,7 @@ export const CONFIG = {
     GRID_SIZE: 50,
     WIDTH: (typeof window !== 'undefined' ? window.innerWidth : 1920) * 5,
     HEIGHT: (typeof window !== 'undefined' ? window.innerHeight : 1080) * 5,
-    EPOCH_LENGTH: 60,
+    EPOCH_LENGTH: 30,
 
     // Environment
     FOOD_COUNT: 4000,

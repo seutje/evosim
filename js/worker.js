@@ -1,5 +1,5 @@
-import { World } from './world.js?v=5';
-import { CONFIG } from './constants.js?v=5';
+import { World } from './world.js';
+import { CONFIG } from './constants.js';
 
 let world;
 
@@ -12,6 +12,7 @@ self.onmessage = function (e) {
       // Override CONFIG with payload if provided (e.g. canvas size)
       if (payload.width) CONFIG.WIDTH = payload.width;
       if (payload.height) CONFIG.HEIGHT = payload.height;
+      if (payload.agentCount) CONFIG.AGENT_COUNT = payload.agentCount;
 
       console.log("Worker: Creating World with Agent Count:", CONFIG.AGENT_COUNT);
       world = new World();
