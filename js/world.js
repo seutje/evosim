@@ -259,6 +259,16 @@ export class World {
             this.inputBuffer[4] = nearestEnemyDist / maxDist;
             this.inputBuffer[5] = angleToEnemy;
 
+            // DEBUG: Log inputs for agent 0
+            if (i === 0 && Math.random() < 0.01) {
+                console.log("Agent 0 Inputs:",
+                    "Neighbor:", this.inputBuffer[0].toFixed(2),
+                    "FoodDist:", this.inputBuffer[1].toFixed(2),
+                    "FoodAngle:", this.inputBuffer[2].toFixed(2),
+                    "Energy:", this.inputBuffer[3].toFixed(2)
+                );
+            }
+
             // --- NEURAL NETWORK ---
             const outputs = NeuralNetwork.compute(this.inputBuffer, this.brainWeights, i * BRAIN_SIZE);
 
@@ -342,10 +352,10 @@ export class World {
             }
         }
 
-        // Fallback to global search if nothing found in radius (optional, but good for robustness)
-        // Actually, if nothing in radius, we just return "nothing found" or a max distance.
-        // But the inputs expect a value. If no food found, inputs should probably reflect that.
-        // For now, let's assume if nothing found, we return max dist.
+        // Fallback if nothing found
+        if (minDistSq === Infinity) {
+            return [Math.max(CONFIG.WIDTH, CONFIG.HEIGHT), -1, 0, 0];
+        }
 
         return [Math.sqrt(minDistSq), foundId, foundDx, foundDy];
     }
@@ -370,6 +380,10 @@ export class World {
                 foundDx = dx;
                 foundDy = dy;
             }
+        }
+
+        if (minDistSq === Infinity) {
+            return [Math.max(CONFIG.WIDTH, CONFIG.HEIGHT), -1, 0, 0];
         }
 
         return [Math.sqrt(minDistSq), foundId, foundDx, foundDy];

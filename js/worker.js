@@ -1,5 +1,5 @@
-import { World } from './world.js?v=2';
-import { CONFIG } from './constants.js?v=2';
+import { World } from './world.js?v=4';
+import { CONFIG } from './constants.js?v=4';
 
 let world;
 
