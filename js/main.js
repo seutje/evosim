@@ -58,6 +58,19 @@ function loop() {
     // Send step to worker
     worker.postMessage({ type: 'step', payload: dt });
 
+    // Continuous Food Spawning
+    if (isMouseDown) {
+        worker.postMessage({
+            type: 'spawn_food',
+            payload: {
+                x: mouseX,
+                y: mouseY,
+                count: 5, // Smaller count per frame for smooth painting
+                radius: 30 // Smaller radius for precision
+            }
+        });
+    }
+
     // UI Updates
     frameCount++;
     if (now - lastFpsUpdate > 1000) {
@@ -69,7 +82,7 @@ function loop() {
         if (latestData) {
             uiCount.innerText = latestData.count;
             uiGen.innerText = latestData.generation;
-            const patterns = ["Random", "Ring", "Stripes", "Corners", "Cluster"];
+            const patterns = ["Star", "Ring", "Stripes", "Corners", "Cluster", "Spiral"];
             uiStatus.innerText = patterns[latestData.currentPattern];
 
             const remaining = Math.max(0, Math.ceil(CONFIG.EPOCH_LENGTH - (latestData.epochTimer || 0)));
@@ -95,4 +108,48 @@ window.addEventListener('resize', () => {
         }
     });
 });
+
+// Mouse Interaction State
+let isMouseDown = false;
+let mouseX = 0;
+let mouseY = 0;
+
+function updateMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = (e.clientX - rect.left) / rect.width * CONFIG.WIDTH;
+    mouseY = (e.clientY - rect.top) / rect.height * CONFIG.HEIGHT;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+    isMouseDown = true;
+    updateMousePos(e);
+});
+
+window.addEventListener('mouseup', () => {
+    isMouseDown = false;
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    if (isMouseDown) {
+        updateMousePos(e);
+    }
+});
+
+// Also handle touch for mobile support (bonus)
+canvas.addEventListener('touchstart', (e) => {
+    isMouseDown = true;
+    updateMousePos(e.touches[0]);
+    e.preventDefault(); // Prevent scrolling
+}, { passive: false });
+
+window.addEventListener('touchend', () => {
+    isMouseDown = false;
+});
+
+canvas.addEventListener('touchmove', (e) => {
+    if (isMouseDown) {
+        updateMousePos(e.touches[0]);
+        e.preventDefault();
+    }
+}, { passive: false });
 

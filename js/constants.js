@@ -11,6 +11,7 @@ export const CONFIG = {
     EPOCH_LENGTH: 30,
 
     // Environment
+    MAX_FOOD: 10000,
     FOOD_COUNT: 4000,
     FOOD_ENERGY: 50,
     FOOD_SIZE: 8,

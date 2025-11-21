@@ -27,12 +27,12 @@ export class World {
 
         // --- SPATIAL PARTITIONING ---
         this.grid = new SpatialHash(CONFIG.WIDTH, CONFIG.HEIGHT, CONFIG.GRID_SIZE, this.capacity);
-        this.foodGrid = new SpatialHash(CONFIG.WIDTH, CONFIG.HEIGHT, CONFIG.GRID_SIZE, CONFIG.FOOD_COUNT);
+        this.foodGrid = new SpatialHash(CONFIG.WIDTH, CONFIG.HEIGHT, CONFIG.GRID_SIZE, CONFIG.MAX_FOOD);
 
         // --- ENVIRONMENT (FOOD) ---
         this.foodCount = CONFIG.FOOD_COUNT;
-        this.foodX = new Float32Array(this.foodCount);
-        this.foodY = new Float32Array(this.foodCount);
+        this.foodX = new Float32Array(CONFIG.MAX_FOOD);
+        this.foodY = new Float32Array(CONFIG.MAX_FOOD);
 
         // --- ENEMIES ---
         this.enemyCount = Math.floor(this.capacity / CONFIG.ENEMY_RATIO);
@@ -138,6 +138,33 @@ export class World {
         for (let i = 0; i < this.enemyCount; i++) {
             this.enemyX[i] = Math.random() * CONFIG.WIDTH;
             this.enemyY[i] = Math.random() * CONFIG.HEIGHT;
+        }
+    }
+
+    spawnFood(x, y) {
+        let id;
+        if (this.foodCount < CONFIG.MAX_FOOD) {
+            id = this.foodCount++;
+        } else {
+            // Recycle random food or oldest? Let's recycle random to keep it simple/dynamic
+            // Or just overwrite the next one in a cycle?
+            // Let's overwrite a random one to avoid "eating" a specific patch
+            id = Math.floor(Math.random() * CONFIG.MAX_FOOD);
+        }
+        this.foodX[id] = x;
+        this.foodY[id] = y;
+    }
+
+    spawnFoodCluster(x, y, count, radius) {
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = Math.random() * radius;
+            const fx = x + Math.cos(angle) * r;
+            const fy = y + Math.sin(angle) * r;
+            // Boundary checks
+            const clampedX = Math.max(0, Math.min(fx, CONFIG.WIDTH));
+            const clampedY = Math.max(0, Math.min(fy, CONFIG.HEIGHT));
+            this.spawnFood(clampedX, clampedY);
         }
     }
 

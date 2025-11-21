@@ -43,5 +43,11 @@ self.onmessage = function (e) {
       if (payload.height) CONFIG.HEIGHT = payload.height;
       // Note: In a real app we might need to resize grid/spatial hash here
       break;
+
+    case 'spawn_food':
+      if (world) {
+        world.spawnFoodCluster(payload.x, payload.y, payload.count || 50, payload.radius || 100);
+      }
+      break;
   }
 };
