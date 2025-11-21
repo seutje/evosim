@@ -61,20 +61,27 @@ export class World {
     getPatternPosition() {
         const w = CONFIG.WIDTH;
         const h = CONFIG.HEIGHT;
+        let x, y;
 
         switch (this.currentPattern) {
             case 0: // Random
-                return [Math.random() * w, Math.random() * h];
+                x = Math.random() * w;
+                y = Math.random() * h;
+                break;
 
             case 1: // Ring
                 const angle = Math.random() * Math.PI * 2;
                 const r = Math.min(w, h) * 0.3 + (Math.random() * 120);
-                return [w / 2 + Math.cos(angle) * r, h / 2 + Math.sin(angle) * r];
+                x = w / 2 + Math.cos(angle) * r;
+                y = h / 2 + Math.sin(angle) * r;
+                break;
 
             case 2: // Vertical Stripes
                 const stripe = Math.floor(Math.random() * 3); // 0, 1, 2
                 const sx = (w / 4) * (stripe + 1) + (Math.random() * 180 - 90);
-                return [sx, Math.random() * h];
+                x = sx;
+                y = Math.random() * h;
+                break;
 
             case 3: // Corners
                 const corner = Math.floor(Math.random() * 4);
@@ -83,14 +90,27 @@ export class World {
                 // Pull in
                 cx = cx === 0 ? w * 0.15 : w * 0.85;
                 cy = cy === 0 ? h * 0.15 : h * 0.85;
-                return [cx + (Math.random() * 300 - 150), cy + (Math.random() * 300 - 150)];
+                x = cx + (Math.random() * 300 - 150);
+                y = cy + (Math.random() * 300 - 150);
+                break;
 
             case 4: // Center Cluster
-                return [w / 2 + (Math.random() * 900 - 450), h / 2 + (Math.random() * 900 - 450)];
+                x = w / 2 + (Math.random() * 900 - 450);
+                y = h / 2 + (Math.random() * 900 - 450);
+                break;
 
             default:
-                return [Math.random() * w, Math.random() * h];
+                x = Math.random() * w;
+                y = Math.random() * h;
+                break;
         }
+
+        // Constrain to viewport with margin
+        const margin = 50;
+        x = Math.max(margin, Math.min(x, w - margin));
+        y = Math.max(margin, Math.min(y, h - margin));
+
+        return [x, y];
     }
 
     spawnEnemies() {
