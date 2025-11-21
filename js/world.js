@@ -136,7 +136,7 @@ export class World {
         this.vy[id] = Math.sin(a) * speed;
         this.angle[id] = a;
 
-        this.energy[id] = 200;
+        this.energy[id] = 50;
 
         // Random color
         this.color[id * 3] = 100 + Math.random() * 155;

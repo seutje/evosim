@@ -13,12 +13,12 @@ export class NeuralNetwork {
     static compute(inputs, weights, offset) {
         let wIdx = offset;
 
-        // --- Layer 1: Input -> Hidden ---
-        // We'll use a small static buffer for hidden outputs to avoid allocation
-        // Note: In a threaded env this would be bad, but JS is single threaded.
-        if (!this.hiddenBuffer) this.hiddenBuffer = new Float32Array(CONFIG.HIDDEN_NEURONS);
+        // Buffers
+        if (!this.hiddenBuffer1) this.hiddenBuffer1 = new Float32Array(CONFIG.HIDDEN_NEURONS);
+        if (!this.hiddenBuffer2) this.hiddenBuffer2 = new Float32Array(CONFIG.HIDDEN_NEURONS);
         if (!this.outputBuffer) this.outputBuffer = new Float32Array(CONFIG.OUTPUT_NEURONS);
 
+        // --- Layer 1: Input -> Hidden 1 ---
         for (let h = 0; h < CONFIG.HIDDEN_NEURONS; h++) {
             let sum = 0;
             // Weights
@@ -27,22 +27,34 @@ export class NeuralNetwork {
             }
             // Bias
             sum += weights[wIdx++];
-
             // Activation (Tanh)
-            this.hiddenBuffer[h] = Math.tanh(sum);
+            this.hiddenBuffer1[h] = Math.tanh(sum);
         }
 
-        // --- Layer 2: Hidden -> Output ---
+        // --- Layer 2: Hidden 1 -> Hidden 2 ---
+        for (let h2 = 0; h2 < CONFIG.HIDDEN_NEURONS; h2++) {
+            let sum = 0;
+            // Weights
+            for (let h1 = 0; h1 < CONFIG.HIDDEN_NEURONS; h1++) {
+                sum += this.hiddenBuffer1[h1] * weights[wIdx++];
+            }
+            // Bias
+            sum += weights[wIdx++];
+            // Activation (Tanh)
+            this.hiddenBuffer2[h2] = Math.tanh(sum);
+        }
+
+        // --- Layer 3: Hidden 2 -> Output ---
         for (let o = 0; o < CONFIG.OUTPUT_NEURONS; o++) {
             let sum = 0;
             // Weights
-            for (let h = 0; h < CONFIG.HIDDEN_NEURONS; h++) {
-                sum += this.hiddenBuffer[h] * weights[wIdx++];
+            for (let h2 = 0; h2 < CONFIG.HIDDEN_NEURONS; h2++) {
+                sum += this.hiddenBuffer2[h2] * weights[wIdx++];
             }
             // Bias
             sum += weights[wIdx++];
 
-            // Activation (Tanh for output too, gives -1 to 1 range)
+            // Activation (Tanh)
             this.outputBuffer[o] = Math.tanh(sum);
         }
 

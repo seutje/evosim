@@ -16,20 +16,22 @@ export const CONFIG = {
     FOOD_SIZE: 8,
 
     // Enemies
-    ENEMY_RATIO: 200, // 1 enemy per 200 agents
+    ENEMY_RATIO: 1000, // 1 enemy per 1000 agents
     ENEMY_SPEED: 3.0,
-    ENEMY_SIZE: 20,
+    ENEMY_SIZE: 50,
 
     // Neural Network Topology
     // Added AngleToFood so they know WHERE to turn
     // Added NearestEnemyDist and AngleToEnemy
     INPUT_NEURONS: 6,  // [NearestNeighborDist, NearestFoodDist, AngleToFood, Energy, NearestEnemyDist, AngleToEnemy]
-    HIDDEN_NEURONS: 6,
+    HIDDEN_NEURONS: 8,
     OUTPUT_NEURONS: 2, // [TurnForce, SpeedForce]
 };
 
 export const BRAIN_SIZE =
-    (CONFIG.INPUT_NEURONS * CONFIG.HIDDEN_NEURONS) +
-    CONFIG.HIDDEN_NEURONS +
-    (CONFIG.HIDDEN_NEURONS * CONFIG.OUTPUT_NEURONS) +
-    CONFIG.OUTPUT_NEURONS;
+    (CONFIG.INPUT_NEURONS * CONFIG.HIDDEN_NEURONS) + // Input -> Hidden1 Weights
+    CONFIG.HIDDEN_NEURONS +                           // Hidden1 Biases
+    (CONFIG.HIDDEN_NEURONS * CONFIG.HIDDEN_NEURONS) + // Hidden1 -> Hidden2 Weights
+    CONFIG.HIDDEN_NEURONS +                           // Hidden2 Biases
+    (CONFIG.HIDDEN_NEURONS * CONFIG.OUTPUT_NEURONS) + // Hidden2 -> Output Weights
+    CONFIG.OUTPUT_NEURONS;                            // Output Biases
