@@ -13,6 +13,15 @@ export class Renderer {
         this.resize(window.innerWidth, window.innerHeight);
         this.initShaders();
         this.initBuffers();
+        this.initBuffers();
+
+        // Camera State
+        this.camera = {
+            radius: CONFIG.WIDTH * 1.2,
+            theta: Math.PI / 2, // Yaw
+            phi: Math.PI / 2,   // Pitch
+            target: [CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2, CONFIG.DEPTH / 2]
+        };
     }
 
     resize(w, h) {
@@ -29,31 +38,22 @@ export class Renderer {
         const gl = this.gl;
 
         const vsSource = `
-            attribute vec2 a_position;
+            attribute vec3 a_position;
             attribute vec3 a_color;
             attribute float a_size;
             
-            uniform vec2 u_resolution;
-            uniform float u_scale;
+            uniform mat4 u_matrix;
             
             varying vec3 v_color;
             
             void main() {
-                // Convert position to clip space
-                // Position is 0..WorldWidth, 0..WorldHeight
-                // We want to map 0..WorldWidth to -1..1 ?
-                // No, we want to map 0..WorldWidth to 0..CanvasWidth (scaled)
+                gl_Position = u_matrix * vec4(a_position, 1.0);
                 
-                // Actually, let's just map world coordinates to clip space directly.
-                // World is 5x screen.
-                // So 0..Width -> -1..1
+                // Size attenuation
+                // Scale size by 1/w (perspective division)
+                // 500.0 is a tweakable factor for size scaling
+                gl_PointSize = a_size * (500.0 / gl_Position.w);
                 
-                vec2 zeroToOne = a_position / u_resolution;
-                vec2 zeroToTwo = zeroToOne * 2.0;
-                vec2 clipSpace = zeroToTwo - 1.0;
-                
-                gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-                gl_PointSize = a_size * u_scale;
                 v_color = a_color;
             }
         `;
@@ -63,6 +63,10 @@ export class Renderer {
             varying vec3 v_color;
             
             void main() {
+                // Round particles
+                vec2 coord = gl_PointCoord - vec2(0.5);
+                if(length(coord) > 0.5) discard;
+                
                 gl_FragColor = vec4(v_color / 255.0, 1.0);
             }
         `;
@@ -79,8 +83,7 @@ export class Renderer {
             console.error('Unable to initialize the shader program: ' + gl.getProgramInfoLog(this.program));
         }
 
-        this.uResolution = gl.getUniformLocation(this.program, 'u_resolution');
-        this.uScale = gl.getUniformLocation(this.program, 'u_scale');
+        this.uMatrix = gl.getUniformLocation(this.program, 'u_matrix');
 
         this.aPosition = gl.getAttribLocation(this.program, 'a_position');
         this.aColor = gl.getAttribLocation(this.program, 'a_color');
@@ -126,73 +129,73 @@ export class Renderer {
 
         // Clear
         gl.clearColor(0.05, 0.07, 0.09, 1.0); // #0d1117
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.enable(gl.DEPTH_TEST);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        // Set Globals
-        // World size is CONFIG.WIDTH/HEIGHT.
-        // But we want to view the whole world scaled down.
-        // CONFIG.WIDTH is window.innerWidth * 5.
-        // We want to map 0..CONFIG.WIDTH to -1..1.
-        gl.uniform2f(this.uResolution, CONFIG.WIDTH, CONFIG.HEIGHT);
+        // --- Matrix Setup ---
+        const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
+        const zNear = 1;
+        const zFar = 20000;
+        const projectionMatrix = m4.perspective(60 * Math.PI / 180, aspect, zNear, zFar);
 
-        // Scale factor.
-        // In Canvas renderer: ctx.scale(0.2, 0.2).
-        // Here, our uResolution handles the mapping to clip space.
-        // But gl_PointSize needs to know the screen pixel size.
-        // If world coordinate is 1 unit, how many pixels is it?
-        // Screen width = window.innerWidth.
-        // World width = window.innerWidth * 5.
-        // So 1 world unit = 0.2 screen pixels.
-        gl.uniform1f(this.uScale, 0.2);
+        // Camera Position (Spherical to Cartesian)
+        const c = this.camera;
+        const camX = c.target[0] + c.radius * Math.sin(c.phi) * Math.cos(c.theta);
+        const camY = c.target[1] + c.radius * Math.cos(c.phi);
+        const camZ = c.target[2] + c.radius * Math.sin(c.phi) * Math.sin(c.theta);
+
+        const up = [0, 1, 0];
+
+        const viewMatrix = m4.lookAt([camX, camY, camZ], c.target, up);
+        const viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix);
+
+        gl.uniformMatrix4fv(this.uMatrix, false, viewProjectionMatrix);
 
         // --- 1. Draw Food ---
         this.drawBatch(
             data.foodX,
             data.foodY,
+            data.foodZ,
             data.foodCount,
             126, 231, 135, // #7ee787
             CONFIG.FOOD_SIZE
         );
 
         // --- 2. Draw Agents ---
-        // Agents have individual colors.
-        this.drawAgents(data.x, data.y, data.color, data.count, CONFIG.AGENT_SIZE);
+        this.drawAgents(data.x, data.y, data.z, data.color, data.count, CONFIG.AGENT_SIZE);
 
         // --- 3. Draw Enemies ---
         this.drawBatch(
             data.enemyX,
             data.enemyY,
+            data.enemyZ,
             data.enemyCount,
             255, 68, 68, // #ff4444
             CONFIG.ENEMY_SIZE
         );
     }
 
-    drawBatch(xArray, yArray, count, r, g, b, size) {
+    drawBatch(xArray, yArray, zArray, count, r, g, b, size) {
         const gl = this.gl;
 
         // Positions
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-        // We need to interleave x and y? Or can we use two buffers?
-        // Or just update data.
-        // Data comes as Float32Array x and Float32Array y.
-        // We can't easily interleave without copying.
-        // So we need two attributes or construct a buffer.
-        // Constructing a buffer every frame is costly?
-        // Copying to a pre-allocated Float32Array is fast.
 
-        if (!this.tempPosBuffer || this.tempPosBuffer.length < count * 2) {
-            this.tempPosBuffer = new Float32Array(count * 2);
+        if (!this.tempPosBuffer || this.tempPosBuffer.length < count * 3) {
+            this.tempPosBuffer = new Float32Array(count * 3);
         }
 
         for (let i = 0; i < count; i++) {
-            this.tempPosBuffer[i * 2] = xArray[i];
-            this.tempPosBuffer[i * 2 + 1] = yArray[i];
+            this.tempPosBuffer[i * 3] = xArray[i];
+            this.tempPosBuffer[i * 3 + 1] = yArray[i];
+            this.tempPosBuffer[i * 3 + 2] = zArray[i];
         }
 
-        gl.bufferData(gl.ARRAY_BUFFER, this.tempPosBuffer.subarray(0, count * 2), gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, this.tempPosBuffer.subarray(0, count * 3), gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.aPosition);
-        gl.vertexAttribPointer(this.aPosition, 2, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(this.aPosition, 3, gl.FLOAT, false, 0, 0);
 
         // Color (Constant)
         gl.disableVertexAttribArray(this.aColor);
@@ -205,36 +208,29 @@ export class Renderer {
         gl.drawArrays(gl.POINTS, 0, count);
     }
 
-    drawAgents(xArray, yArray, colorArray, count, size) {
+    drawAgents(xArray, yArray, zArray, colorArray, count, size) {
         const gl = this.gl;
 
         // Positions
-        if (!this.tempPosBuffer || this.tempPosBuffer.length < count * 2) {
-            this.tempPosBuffer = new Float32Array(count * 2);
+        if (!this.tempPosBuffer || this.tempPosBuffer.length < count * 3) {
+            this.tempPosBuffer = new Float32Array(count * 3);
         }
         for (let i = 0; i < count; i++) {
-            this.tempPosBuffer[i * 2] = xArray[i];
-            this.tempPosBuffer[i * 2 + 1] = yArray[i];
+            this.tempPosBuffer[i * 3] = xArray[i];
+            this.tempPosBuffer[i * 3 + 1] = yArray[i];
+            this.tempPosBuffer[i * 3 + 2] = zArray[i];
         }
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, this.tempPosBuffer.subarray(0, count * 2), gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, this.tempPosBuffer.subarray(0, count * 3), gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.aPosition);
-        gl.vertexAttribPointer(this.aPosition, 2, gl.FLOAT, false, 0, 0);
+        gl.vertexAttribPointer(this.aPosition, 3, gl.FLOAT, false, 0, 0);
 
         // Colors (Per instance)
         gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, colorArray.subarray(0, count * 3), gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.aColor);
         gl.vertexAttribPointer(this.aColor, 3, gl.FLOAT, false, 0, 0);
-
-        /*
-        // Colors (Per instance)
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.colorBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, colorArray.subarray(0, count * 3), gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(this.aColor);
-        gl.vertexAttribPointer(this.aColor, 3, gl.FLOAT, false, 0, 0);
-        */
 
         // Size (Constant)
         gl.disableVertexAttribArray(this.aSize);
@@ -242,5 +238,152 @@ export class Renderer {
 
         gl.drawArrays(gl.POINTS, 0, count);
     }
+
+    updateCamera(zoom, dTheta, dPhi, dPanX, dPanY) {
+        const c = this.camera;
+
+        // Zoom
+        if (zoom !== 0) {
+            c.radius *= (1 + zoom * 0.001);
+            c.radius = Math.max(100, Math.min(c.radius, 50000));
+        }
+
+        // Rotate
+        if (dTheta !== 0 || dPhi !== 0) {
+            c.theta += dTheta * 0.01;
+            c.phi += dPhi * 0.01;
+
+            // Clamp phi to avoid gimbal lock
+            const epsilon = 0.01;
+            c.phi = Math.max(epsilon, Math.min(Math.PI - epsilon, c.phi));
+        }
+
+        // Pan
+        if (dPanX !== 0 || dPanY !== 0) {
+            // Calculate Right and Up vectors relative to camera
+            const camX = c.radius * Math.sin(c.phi) * Math.cos(c.theta);
+            const camY = c.radius * Math.cos(c.phi);
+            const camZ = c.radius * Math.sin(c.phi) * Math.sin(c.theta);
+
+            const camPos = [camX, camY, camZ]; // Relative to target
+            const up = [0, 1, 0];
+
+            // We need the view matrix vectors to pan correctly relative to view
+            // Forward is -camPos (normalized)
+            const forward = normalize([-camX, -camY, -camZ]);
+            const right = normalize(cross(forward, up));
+            const camUp = normalize(cross(right, forward));
+
+            const panSpeed = c.radius * 0.001;
+
+            c.target[0] -= (right[0] * dPanX + camUp[0] * dPanY) * panSpeed;
+            c.target[1] -= (right[1] * dPanX + camUp[1] * dPanY) * panSpeed;
+            c.target[2] -= (right[2] * dPanX + camUp[2] * dPanY) * panSpeed;
+        }
+    }
+}
+
+const m4 = {
+    perspective: function (fieldOfViewInRadians, aspect, near, far) {
+        var f = Math.tan(Math.PI * 0.5 - 0.5 * fieldOfViewInRadians);
+        var rangeInv = 1.0 / (near - far);
+
+        return [
+            f / aspect, 0, 0, 0,
+            0, f, 0, 0,
+            0, 0, (near + far) * rangeInv, -1,
+            0, 0, near * far * rangeInv * 2, 0
+        ];
+    },
+
+    lookAt: function (cameraPosition, target, up) {
+        var zAxis = normalize(subtractVectors(cameraPosition, target));
+        var xAxis = normalize(cross(up, zAxis));
+        var yAxis = normalize(cross(zAxis, xAxis));
+
+        return [
+            xAxis[0], yAxis[0], zAxis[0], 0,
+            xAxis[1], yAxis[1], zAxis[1], 0,
+            xAxis[2], yAxis[2], zAxis[2], 0,
+            -(xAxis[0] * cameraPosition[0] + xAxis[1] * cameraPosition[1] + xAxis[2] * cameraPosition[2]),
+            -(yAxis[0] * cameraPosition[0] + yAxis[1] * cameraPosition[1] + yAxis[2] * cameraPosition[2]),
+            -(zAxis[0] * cameraPosition[0] + zAxis[1] * cameraPosition[1] + zAxis[2] * cameraPosition[2]),
+            1
+        ];
+    },
+
+    multiply: function (a, b) {
+        var a00 = a[0 * 4 + 0];
+        var a01 = a[0 * 4 + 1];
+        var a02 = a[0 * 4 + 2];
+        var a03 = a[0 * 4 + 3];
+        var a10 = a[1 * 4 + 0];
+        var a11 = a[1 * 4 + 1];
+        var a12 = a[1 * 4 + 2];
+        var a13 = a[1 * 4 + 3];
+        var a20 = a[2 * 4 + 0];
+        var a21 = a[2 * 4 + 1];
+        var a22 = a[2 * 4 + 2];
+        var a23 = a[2 * 4 + 3];
+        var a30 = a[3 * 4 + 0];
+        var a31 = a[3 * 4 + 1];
+        var a32 = a[3 * 4 + 2];
+        var a33 = a[3 * 4 + 3];
+        var b00 = b[0 * 4 + 0];
+        var b01 = b[0 * 4 + 1];
+        var b02 = b[0 * 4 + 2];
+        var b03 = b[0 * 4 + 3];
+        var b10 = b[1 * 4 + 0];
+        var b11 = b[1 * 4 + 1];
+        var b12 = b[1 * 4 + 2];
+        var b13 = b[1 * 4 + 3];
+        var b20 = b[2 * 4 + 0];
+        var b21 = b[2 * 4 + 1];
+        var b22 = b[2 * 4 + 2];
+        var b23 = b[2 * 4 + 3];
+        var b30 = b[3 * 4 + 0];
+        var b31 = b[3 * 4 + 1];
+        var b32 = b[3 * 4 + 2];
+        var b33 = b[3 * 4 + 3];
+        return [
+            b00 * a00 + b01 * a10 + b02 * a20 + b03 * a30,
+            b00 * a01 + b01 * a11 + b02 * a21 + b03 * a31,
+            b00 * a02 + b01 * a12 + b02 * a22 + b03 * a32,
+            b00 * a03 + b01 * a13 + b02 * a23 + b03 * a33,
+            b10 * a00 + b11 * a10 + b12 * a20 + b13 * a30,
+            b10 * a01 + b11 * a11 + b12 * a21 + b13 * a31,
+            b10 * a02 + b11 * a12 + b12 * a22 + b13 * a32,
+            b10 * a03 + b11 * a13 + b12 * a23 + b13 * a33,
+            b20 * a00 + b21 * a10 + b22 * a20 + b23 * a30,
+            b20 * a01 + b21 * a11 + b22 * a21 + b23 * a31,
+            b20 * a02 + b21 * a12 + b22 * a22 + b23 * a32,
+            b20 * a03 + b21 * a13 + b22 * a23 + b23 * a33,
+            b30 * a00 + b31 * a10 + b32 * a20 + b33 * a30,
+            b30 * a01 + b31 * a11 + b32 * a21 + b33 * a31,
+            b30 * a02 + b31 * a12 + b32 * a22 + b33 * a32,
+            b30 * a03 + b31 * a13 + b32 * a23 + b33 * a33,
+        ];
+    },
+};
+
+function normalize(v) {
+    var length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    if (length > 0.00001) {
+        return [v[0] / length, v[1] / length, v[2] / length];
+    } else {
+        return [0, 0, 0];
+    }
+}
+
+function cross(a, b) {
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+    ];
+}
+
+function subtractVectors(a, b) {
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
 

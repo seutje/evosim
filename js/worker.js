@@ -12,6 +12,7 @@ self.onmessage = function (e) {
       // Override CONFIG with payload if provided (e.g. canvas size)
       if (payload.width) CONFIG.WIDTH = payload.width;
       if (payload.height) CONFIG.HEIGHT = payload.height;
+      if (payload.depth) CONFIG.DEPTH = payload.depth;
       if (payload.agentCount) CONFIG.AGENT_COUNT = payload.agentCount;
 
       console.log("Worker: Creating World with Agent Count:", CONFIG.AGENT_COUNT);
@@ -41,12 +42,13 @@ self.onmessage = function (e) {
     case 'resize':
       if (payload.width) CONFIG.WIDTH = payload.width;
       if (payload.height) CONFIG.HEIGHT = payload.height;
+      if (payload.depth) CONFIG.DEPTH = payload.depth;
       // Note: In a real app we might need to resize grid/spatial hash here
       break;
 
     case 'spawn_food':
       if (world) {
-        world.spawnFoodCluster(payload.x, payload.y, payload.count || 50, payload.radius || 100);
+        world.spawnFoodCluster(payload.x, payload.y, payload.z || CONFIG.DEPTH / 2, payload.count || 50, payload.radius || 100);
       }
       break;
   }

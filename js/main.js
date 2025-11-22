@@ -15,6 +15,7 @@ worker.postMessage({
     payload: {
         width: CONFIG.WIDTH,
         height: CONFIG.HEIGHT,
+        depth: CONFIG.DEPTH,
         agentCount: CONFIG.AGENT_COUNT
     }
 });
@@ -58,18 +59,8 @@ function loop() {
     // Send step to worker
     worker.postMessage({ type: 'step', payload: dt });
 
-    // Continuous Food Spawning
-    if (isMouseDown) {
-        worker.postMessage({
-            type: 'spawn_food',
-            payload: {
-                x: mouseX,
-                y: mouseY,
-                count: 5, // Smaller count per frame for smooth painting
-                radius: 30 // Smaller radius for precision
-            }
-        });
-    }
+    // Camera Controls are event-driven, not per-frame
+
 
     // UI Updates
     frameCount++;
@@ -98,58 +89,58 @@ window.addEventListener('resize', () => {
     // Update CONFIG in main thread (optional, mostly for initial setup)
     CONFIG.WIDTH = window.innerWidth * 5;
     CONFIG.HEIGHT = window.innerHeight * 5;
+    CONFIG.DEPTH = window.innerHeight * 5;
 
     // Notify worker
     worker.postMessage({
         type: 'resize',
         payload: {
             width: CONFIG.WIDTH,
-            height: CONFIG.HEIGHT
+            height: CONFIG.HEIGHT,
+            depth: CONFIG.DEPTH
         }
     });
 });
 
 // Mouse Interaction State
-let isMouseDown = false;
-let mouseX = 0;
-let mouseY = 0;
-
-function updateMousePos(e) {
-    const rect = canvas.getBoundingClientRect();
-    mouseX = (e.clientX - rect.left) / rect.width * CONFIG.WIDTH;
-    mouseY = (e.clientY - rect.top) / rect.height * CONFIG.HEIGHT;
-}
+let isDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+let dragButton = -1; // 0: Left, 1: Middle, 2: Right
 
 canvas.addEventListener('mousedown', (e) => {
-    isMouseDown = true;
-    updateMousePos(e);
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    dragButton = e.button;
+    e.preventDefault(); // Prevent selection
 });
 
 window.addEventListener('mouseup', () => {
-    isMouseDown = false;
+    isDragging = false;
+    dragButton = -1;
 });
 
 canvas.addEventListener('mousemove', (e) => {
-    if (isMouseDown) {
-        updateMousePos(e);
+    if (isDragging) {
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+
+        if (dragButton === 0) {
+            // Left Click: Rotate
+            renderer.updateCamera(0, -dx, -dy, 0, 0);
+        } else if (dragButton === 1 || dragButton === 2) {
+            // Middle/Right Click: Pan
+            renderer.updateCamera(0, 0, 0, dx, dy);
+        }
     }
 });
 
-// Also handle touch for mobile support (bonus)
-canvas.addEventListener('touchstart', (e) => {
-    isMouseDown = true;
-    updateMousePos(e.touches[0]);
-    e.preventDefault(); // Prevent scrolling
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    renderer.updateCamera(e.deltaY, 0, 0, 0, 0);
 }, { passive: false });
 
-window.addEventListener('touchend', () => {
-    isMouseDown = false;
-});
-
-canvas.addEventListener('touchmove', (e) => {
-    if (isMouseDown) {
-        updateMousePos(e.touches[0]);
-        e.preventDefault();
-    }
-}, { passive: false });
 

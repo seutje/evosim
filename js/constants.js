@@ -8,6 +8,7 @@ export const CONFIG = {
     GRID_SIZE: 50,
     WIDTH: (typeof window !== 'undefined' ? window.innerWidth : 1920) * 5,
     HEIGHT: (typeof window !== 'undefined' ? window.innerHeight : 1080) * 5,
+    DEPTH: (typeof window !== 'undefined' ? window.innerHeight : 1080) * 5, // Make it a cube
     EPOCH_LENGTH: 30,
 
     // Environment
@@ -22,11 +23,10 @@ export const CONFIG = {
     ENEMY_SIZE: 50,
 
     // Neural Network Topology
-    // Added AngleToFood so they know WHERE to turn
-    // Added NearestEnemyDist and AngleToEnemy
-    INPUT_NEURONS: 6,  // [NearestNeighborDist, NearestFoodDist, AngleToFood, Energy, NearestEnemyDist, AngleToEnemy]
+    // Inputs: [NeighborDist, FoodDist, FoodYaw, FoodPitch, Energy, EnemyDist, EnemyYaw, EnemyPitch]
+    INPUT_NEURONS: 8,
     HIDDEN_NEURONS: 8,
-    OUTPUT_NEURONS: 2, // [TurnForce, SpeedForce]
+    OUTPUT_NEURONS: 3, // [YawForce, PitchForce, SpeedForce]
 };
 
 export const BRAIN_SIZE =
