@@ -674,7 +674,8 @@ export class World {
             enemyZ: this.enemyZ,
             generation: this.generation[0], // Just for UI
             currentPattern: this.currentPattern,
-            epochTimer: this.epochTimer
+            epochTimer: this.epochTimer,
+            energy: this.energy
         };
     }
 }

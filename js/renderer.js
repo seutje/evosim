@@ -41,10 +41,12 @@ export class Renderer {
             attribute vec3 a_position;
             attribute vec3 a_color;
             attribute float a_size;
+            attribute float a_energy;
             
             uniform mat4 u_matrix;
             
             varying vec3 v_color;
+            varying float v_energy;
             
             void main() {
                 gl_Position = u_matrix * vec4(a_position, 1.0);
@@ -52,22 +54,39 @@ export class Renderer {
                 // Size attenuation
                 // Scale size by 1/w (perspective division)
                 // 500.0 is a tweakable factor for size scaling
-                gl_PointSize = a_size * (500.0 / gl_Position.w);
+                // Grow slightly with energy (0 to 100)
+                float energyScale = 1.0 + (a_energy / 100.0) * 0.5;
+                gl_PointSize = a_size * energyScale * (500.0 / gl_Position.w);
                 
                 v_color = a_color;
+                v_energy = a_energy;
             }
         `;
 
         const fsSource = `
             precision mediump float;
             varying vec3 v_color;
+            varying float v_energy;
             
             void main() {
                 // Round particles
                 vec2 coord = gl_PointCoord - vec2(0.5);
-                if(length(coord) > 0.5) discard;
+                float dist = length(coord);
+                if(dist > 0.5) discard;
                 
-                gl_FragColor = vec4(v_color / 255.0, 1.0);
+                // Glow effect
+                // High energy = whiter core, brighter
+                float energyFactor = v_energy / 100.0;
+                
+                // Mix color with white based on energy
+                vec3 finalColor = mix(v_color / 255.0, vec3(1.0, 1.0, 1.0), energyFactor * 0.5);
+                
+                // Soft edge for glow
+                float alpha = 1.0 - smoothstep(0.3, 0.5, dist);
+                // Boost alpha with energy
+                alpha = clamp(alpha + energyFactor * 0.2, 0.0, 1.0);
+
+                gl_FragColor = vec4(finalColor, alpha);
             }
         `;
 
@@ -88,6 +107,7 @@ export class Renderer {
         this.aPosition = gl.getAttribLocation(this.program, 'a_position');
         this.aColor = gl.getAttribLocation(this.program, 'a_color');
         this.aSize = gl.getAttribLocation(this.program, 'a_size');
+        this.aEnergy = gl.getAttribLocation(this.program, 'a_energy');
     }
 
     compileShader(type, source) {
@@ -114,6 +134,7 @@ export class Renderer {
 
         this.positionBuffer = gl.createBuffer();
         this.colorBuffer = gl.createBuffer();
+        this.energyBuffer = gl.createBuffer();
         // Size is constant per type (agent, food, enemy), but we can pass it as attribute or uniform.
         // Since we batch draw, we can use a uniform for size if we draw in passes.
         // Let's draw in 3 passes: Food, Agents, Enemies.
@@ -164,7 +185,7 @@ export class Renderer {
         );
 
         // --- 2. Draw Agents ---
-        this.drawAgents(data.x, data.y, data.z, data.color, data.count, CONFIG.AGENT_SIZE);
+        this.drawAgents(data.x, data.y, data.z, data.color, data.energy, data.count, CONFIG.AGENT_SIZE);
 
         // --- 3. Draw Enemies ---
         this.drawBatch(
@@ -205,10 +226,14 @@ export class Renderer {
         gl.disableVertexAttribArray(this.aSize);
         gl.vertexAttrib1f(this.aSize, size);
 
+        // Energy (Constant 0 for non-agents)
+        gl.disableVertexAttribArray(this.aEnergy);
+        gl.vertexAttrib1f(this.aEnergy, 0.0);
+
         gl.drawArrays(gl.POINTS, 0, count);
     }
 
-    drawAgents(xArray, yArray, zArray, colorArray, count, size) {
+    drawAgents(xArray, yArray, zArray, colorArray, energyArray, count, size) {
         const gl = this.gl;
 
         // Positions
@@ -231,6 +256,12 @@ export class Renderer {
         gl.bufferData(gl.ARRAY_BUFFER, colorArray.subarray(0, count * 3), gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.aColor);
         gl.vertexAttribPointer(this.aColor, 3, gl.FLOAT, false, 0, 0);
+
+        // Energy (Per instance)
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.energyBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, energyArray.subarray(0, count), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(this.aEnergy);
+        gl.vertexAttribPointer(this.aEnergy, 1, gl.FLOAT, false, 0, 0);
 
         // Size (Constant)
         gl.disableVertexAttribArray(this.aSize);
