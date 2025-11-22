@@ -17,7 +17,7 @@ export class Renderer {
 
         // Camera State
         this.camera = {
-            radius: CONFIG.WIDTH * 1.2,
+            radius: CONFIG.WIDTH * 0.6,
             theta: Math.PI / 2, // Yaw
             phi: Math.PI / 2,   // Pitch
             target: [CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2, CONFIG.DEPTH / 2]
