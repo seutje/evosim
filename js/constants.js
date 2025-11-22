@@ -18,9 +18,9 @@ export const CONFIG = {
     FOOD_SIZE: 8,
 
     // Enemies
-    ENEMY_RATIO: 1000, // 1 enemy per 1000 agents
+    ENEMY_RATIO: 100, // 1 enemy per 1000 agents
     ENEMY_SPEED: 3.0,
-    ENEMY_SIZE: 50,
+    ENEMY_SIZE: 100,
 
     // Neural Network Topology
     // Inputs: [NeighborDist, FoodDist, FoodYaw, FoodPitch, Energy, EnemyDist, EnemyYaw, EnemyPitch]

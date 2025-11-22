@@ -26,6 +26,8 @@ const uiFps = document.getElementById('fps');
 const uiGen = document.getElementById('gen');
 const uiStatus = document.getElementById('status');
 const uiTimer = document.getElementById('timer');
+const uiAvgEnergy = document.getElementById('avgEnergy');
+const uiMaxEnergy = document.getElementById('maxEnergy');
 
 let lastTime = performance.now();
 let frameCount = 0;
@@ -78,6 +80,9 @@ function loop() {
 
             const remaining = Math.max(0, Math.ceil(CONFIG.EPOCH_LENGTH - (latestData.epochTimer || 0)));
             uiTimer.innerText = isNaN(remaining) ? "Wait..." : remaining;
+
+            uiAvgEnergy.innerText = latestData.avgEnergy.toFixed(1);
+            uiMaxEnergy.innerText = latestData.maxEnergy.toFixed(1);
         }
     }
 

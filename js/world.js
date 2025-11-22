@@ -658,7 +658,7 @@ export class World {
     }
 
     getRenderData() {
-        return {
+        const data = {
             count: this.count,
             x: this.x,
             y: this.y,
@@ -675,7 +675,23 @@ export class World {
             generation: this.generation[0], // Just for UI
             currentPattern: this.currentPattern,
             epochTimer: this.epochTimer,
-            energy: this.energy
+            energy: this.energy,
+            avgEnergy: 0,
+            maxEnergy: 0
         };
+
+        if (this.count > 0) {
+            let sum = 0;
+            let max = -Infinity;
+            for (let i = 0; i < this.count; i++) {
+                const e = this.energy[i];
+                sum += e;
+                if (e > max) max = e;
+            }
+            data.avgEnergy = sum / this.count;
+            data.maxEnergy = max;
+        }
+
+        return data;
     }
 }
